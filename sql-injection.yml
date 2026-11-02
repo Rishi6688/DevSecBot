@@ -1,0 +1,14 @@
+
+rules:
+  - id: test-sql-injection-fstring
+    languages:
+      - python
+    message: "Potential SQL injection: dynamically constructed SQL is passed to execute(). Use parameterized queries."
+    severity: ERROR
+    mode: taint
+    pattern-sources:
+      - pattern: |
+          f"..."
+    pattern-sinks:
+      - pattern: |
+          $CURSOR.execute($QUERY)
