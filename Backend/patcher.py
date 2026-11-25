@@ -1,14 +1,8 @@
-
 from pathlib import Path
-import ast
+from validator import validate_patched_file
 
 
 def apply_patch(original_file: str, vulnerable_code: str, fixed_code: str):
-    """
-    Replace only the vulnerable code in a Python file.
-    Save the modified file separately.
-    Preserve the original file.
-    """
 
     source_path = Path(original_file)
 
@@ -31,32 +25,25 @@ def apply_patch(original_file: str, vulnerable_code: str, fixed_code: str):
         }
 
     try:
-        # Read the complete original file.
         original_content = source_path.read_text(encoding="utf-8")
 
-        # Ensure the vulnerable code occurs exactly once.
         occurrences = original_content.count(vulnerable_code)
 
         if occurrences != 1:
             return {
                 "status": "failed",
                 "message": (
-                    f"Expected one occurrence of vulnerable code, "
+                    f"Expected exactly one occurrence, "
                     f"but found {occurrences}."
                 )
             }
 
-        # Replace only the vulnerable section.
         patched_content = original_content.replace(
             vulnerable_code,
             fixed_code,
             1
         )
 
-        # Validate the complete modified Python file.
-        ast.parse(patched_content)
-
-        # Save the result separately.
         output_dir = source_path.parent / "patched_files"
         output_dir.mkdir(exist_ok=True)
 
@@ -67,17 +54,26 @@ def apply_patch(original_file: str, vulnerable_code: str, fixed_code: str):
             encoding="utf-8"
         )
 
+        validation = validate_patched_file(str(output_path))
+
+        if validation["status"] != "passed":
+            output_path.unlink(missing_ok=True)
+
+            return {
+                "status": "failed",
+                "validation": validation,
+                "message": "Patched file failed local validation."
+            }
+
         return {
-            "status": "success",
+            "status": "awaiting_semgrep_validation",
             "original_file": str(source_path),
             "patched_file": str(output_path),
-            "message": "Vulnerable code replaced successfully."
-        }
-
-    except SyntaxError as error:
-        return {
-            "status": "failed",
-            "message": f"Invalid Python syntax: {error}"
+            "validation": validation,
+            "message": (
+                "Patch created and local validation passed. "
+                "GitHub Actions Semgrep verification is still required."
+            )
         }
 
     except OSError as error:
@@ -85,3 +81,4 @@ def apply_patch(original_file: str, vulnerable_code: str, fixed_code: str):
             "status": "failed",
             "message": str(error)
         }
+    

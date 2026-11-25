@@ -1,11 +1,11 @@
 
 import ast
-import json
 import subprocess
 import sys
 from pathlib import Path
 
-def validate_patched_file(file_path: str, original_check_id: str = None):
+
+def validate_patched_file(file_path: str):
 
     path = Path(file_path)
 
@@ -21,7 +21,7 @@ def validate_patched_file(file_path: str, original_check_id: str = None):
             "message": "Only Python files are supported."
         }
 
-    # Step 1: Check Python syntax
+    # Step 1: Python syntax validation
     try:
         source_code = path.read_text(encoding="utf-8")
         ast.parse(source_code)
@@ -33,66 +33,26 @@ def validate_patched_file(file_path: str, original_check_id: str = None):
             "message": str(error)
         }
 
-    # Step 2: Run Semgrep scan
-    command = [
-        sys.executable,
-        "-m",
-        "semgrep",
-        "scan",
-        "--config",
-        "p/security-audit",
-        "--json",
-        str(path)
-    ]
-
+    # Step 2: Compile validation
     try:
-        result = subprocess.run(
-            command,
+        subprocess.run(
+            [sys.executable, "-m", "py_compile", str(path)],
             capture_output=True,
             text=True,
-            timeout=120
+            check=True
         )
 
-        if result.returncode not in (0, 1):
-            return {
-                "status": "failed",
-                "syntax_check": "passed",
-                "semgrep_check": "error",
-                "message": result.stderr
-            }
-
-        scan_data = json.loads(result.stdout)
-
-        findings = scan_data.get("results", [])
-
-        if original_check_id:
-            remaining = [
-                finding for finding in findings
-                if finding.get("check_id") == original_check_id
-            ]
-        else:
-            remaining = findings
-
-        if remaining:
-            return {
-                "status": "failed",
-                "syntax_check": "passed",
-                "semgrep_check": "failed",
-                "remaining_findings": remaining,
-                "message": "Security findings remain."
-            }
-
-        return {
-            "status": "passed",
-            "syntax_check": "passed",
-            "semgrep_check": "passed",
-            "message": "No matching Semgrep findings detected."
-        }
-
-    except (subprocess.TimeoutExpired, json.JSONDecodeError) as error:
+    except subprocess.CalledProcessError as error:
         return {
             "status": "failed",
-            "syntax_check": "passed",
-            "semgrep_check": "error",
-            "message": str(error)
+            "syntax_check": "failed",
+            "message": error.stderr
         }
+
+    return {
+        "status": "passed",
+        "syntax_check": "passed",
+        "semgrep_check": "pending_github_actions",
+        "message": "Python validation passed. Semgrep verification must run through GitHub Actions."
+    }
+
