@@ -1,4 +1,3 @@
-
 import json
 import re
 import requests
@@ -63,6 +62,8 @@ def health():
 # SQLite queries executed using
 # cursor.execute(query)
 # -----------------------------
+
+
 def build_sqlite_fstring_fix(code: str):
 
     query_pattern = re.compile(
@@ -77,23 +78,27 @@ def build_sqlite_fstring_fix(code: str):
     query_variable = query_match.group(1)
     sql_template = query_match.group(3)
 
-    # Extract interpolated variables
-    placeholders = re.findall(
-        r"\{([a-zA-Z_]\w*)\}",
-        sql_template
+    # Find simple variable placeholders, including quoted placeholders
+    placeholder_pattern = re.compile(
+        r"""(['"]?)\{([a-zA-Z_]\w*)\}\1"""
     )
 
-    if not placeholders:
+    matches = list(placeholder_pattern.finditer(sql_template))
+
+    if not matches:
         return None
 
-    # Only support simple variable names
-    for item in placeholders:
-        if not re.fullmatch(r"[a-zA-Z_]\w*", item):
-            return None
+    # Reject unsupported f-string expressions
+    all_placeholders = re.findall(r"\{.*?\}", sql_template)
 
-    # Replace interpolated variables with ?
-    parameterized_sql = re.sub(
-        r"\{[a-zA-Z_]\w*\}",
+    if len(matches) != len(all_placeholders):
+        return None
+
+    # Extract variable names
+    placeholders = [match.group(2) for match in matches]
+
+    # Replace the complete quoted placeholder with ?
+    parameterized_sql = placeholder_pattern.sub(
         "?",
         sql_template
     )
@@ -106,13 +111,12 @@ def build_sqlite_fstring_fix(code: str):
     if not execute_pattern.search(code):
         return None
 
-    # Create parameter tuple
+    # Build parameter tuple
     if len(placeholders) == 1:
         parameters = f"({placeholders[0]},)"
     else:
         parameters = "(" + ", ".join(placeholders) + ")"
 
-    # Generate corrected Python code
     fixed_code = (
         "cursor.execute(\n"
         f"    {parameterized_sql!r},\n"
