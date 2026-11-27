@@ -1,0 +1,86 @@
+name: DevSecBot Security Scan
+
+on:
+  push:
+    branches: ["master"]
+  pull_request:
+    branches: ["master"]
+
+jobs:
+  semgrep-scan:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install Semgrep
+        run: python -m pip install semgrep
+
+      - name: Run Original Code Scan
+        run: |
+          semgrep scan \
+            --config p/security-audit \
+            --config sql-injection.yml \
+            --json \
+            --output semgrep-findings.json \
+            .
+
+      - name: Upload Original Scan Findings
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: semgrep-findings
+          path: semgrep-findings.json
+          if-no-files-found: warn
+
+  rescan-patched-files:
+    runs-on: ubuntu-latest
+    needs: semgrep-scan
+    if: always()
+
+    steps:
+      - name: Checkout repository code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install Semgrep
+        run: python -m pip install semgrep
+
+      - name: Check for patched files
+        id: check
+        run: |
+          if [ -d "Backend/patched_files" ] && [ "$(find Backend/patched_files -name '*.py' | wc -l)" -gt 0 ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "No patched Python files found."
+          fi
+
+      - name: Rescan Patched Files
+        if: steps.check.outputs.exists == 'true'
+        run: |
+          semgrep scan \
+            --error \
+            --config p/security-audit \
+            --config sql-injection.yml \
+            --json \
+            --output patched-findings.json \
+            Backend/patched_files/
+
+      - name: Upload Patched Scan Findings
+        if: always() && steps.check.outputs.exists == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: patched-findings
+          path: patched-findings.json
+          if-no-files-found: warn

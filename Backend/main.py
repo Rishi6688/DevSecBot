@@ -327,7 +327,8 @@ def apply_generated_fix(request: ApplyFixRequest):
         result = apply_patch(
             str(source_path),
             request.vulnerable_code,
-            request.fixed_code
+            request.fixed_code,
+            str(PROJECT_ROOT)
         )
 
         # Handle patch creation or local validation failure
