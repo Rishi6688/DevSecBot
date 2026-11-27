@@ -1,3 +1,5 @@
+
+
 name: DevSecBot Security Scan
 
 on:
@@ -29,6 +31,7 @@ jobs:
             --config sql-injection.yml \
             --json \
             --output semgrep-findings.json \
+            --exclude=patched_project/** \
             .
 
       - name: Upload Original Scan Findings
@@ -39,7 +42,7 @@ jobs:
           path: semgrep-findings.json
           if-no-files-found: warn
 
-  rescan-patched-files:
+  rescan-patched-project:
     runs-on: ubuntu-latest
     needs: semgrep-scan
     if: always()
@@ -56,18 +59,24 @@ jobs:
       - name: Install Semgrep
         run: python -m pip install semgrep
 
-      - name: Check for patched files
-        id: check
+      - name: Check for patched project
         run: |
-          if [ -d "Backend/patched_files" ] && [ "$(find Backend/patched_files -name '*.py' | wc -l)" -gt 0 ]; then
-            echo "exists=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "exists=false" >> "$GITHUB_OUTPUT"
-            echo "No patched Python files found."
+          if [ ! -d "patched_project" ]; then
+            echo "ERROR: Patched project directory not found."
+            exit 1
           fi
 
-      - name: Rescan Patched Files
-        if: steps.check.outputs.exists == 'true'
+          PYTHON_FILES=$(find patched_project -type f -name '*.py' | wc -l)
+
+          if [ "$PYTHON_FILES" -eq 0 ]; then
+            echo "ERROR: No patched Python files found."
+            exit 1
+          fi
+
+          echo "Patched project found."
+          echo "Python files available: $PYTHON_FILES"
+
+      - name: Rescan Full Patched Project
         run: |
           semgrep scan \
             --error \
@@ -75,10 +84,10 @@ jobs:
             --config sql-injection.yml \
             --json \
             --output patched-findings.json \
-            Backend/patched_files/
+            patched_project/
 
       - name: Upload Patched Scan Findings
-        if: always() && steps.check.outputs.exists == 'true'
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: patched-findings
