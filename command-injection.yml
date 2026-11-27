@@ -1,0 +1,8 @@
+rules:
+  - id: python-command-injection-shell-true
+    languages:
+      - python
+    message: "Potential command injection: subprocess.run() uses shell=True. Use an argument list with shell=False."
+    severity: ERROR
+    mode: search
+    pattern: subprocess.run(..., shell=True)

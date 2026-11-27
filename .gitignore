@@ -1,5 +1,6 @@
 .venv/
 Backend/.venv/
+.venv-semgrep/
 __pycache__/
 *.pyc
 .env

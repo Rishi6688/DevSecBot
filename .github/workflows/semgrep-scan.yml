@@ -29,6 +29,7 @@ jobs:
           semgrep scan \
             --config p/security-audit \
             --config sql-injection.yml \
+            --config command-injection.yml \
             --json \
             --output semgrep-findings.json \
             .
@@ -67,14 +68,17 @@ jobs:
             echo "exists=true" >> "$GITHUB_OUTPUT"
           else
             echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "No patched Python files found."
           fi
 
       - name: Rescan patched Python files
         if: steps.check.outputs.exists == 'true'
         run: |
           semgrep scan \
+            --error \
             --config p/security-audit \
             --config sql-injection.yml \
+            --config command-injection.yml \
             --json \
             --output patched-findings.json \
             Backend/patched_files/
@@ -86,4 +90,3 @@ jobs:
           name: patched-semgrep-findings
           path: patched-findings.json
           if-no-files-found: warn
-
